@@ -1,0 +1,12 @@
+.env
+data/*.db
+data/*.sqlite
+workspace/
+__pycache__/
+*.pyc
+*.pyo
+.chainlit/
+chainlit.md
+logs/
+tmp/
+*.log

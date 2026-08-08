@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Open Views — RATISS V9 Aeon Prime</title>
+  <link rel="stylesheet" href="/static/css/cyberpunk.css">
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+  <!-- Login overlay (session locale, Python pur) -->
+  <div id="login-overlay">
+    <div id="login-box">
+      <h1>⚛ RATISS V9 Aeon Prime</h1>
+      <input id="login-user" type="text" placeholder="Identifiant">
+      <input id="login-pass" type="password" placeholder="Mot de passe">
+      <button class="btn" id="login-btn">Se connecter</button>
+      <div class="err hidden" id="login-err"></div>
+    </div>
+  </div>
+
+  <div id="app" class="hidden">
+    <header id="topbar">
+      <span class="logo">⚛ Open Views · RATISS V9 Aeon Prime</span>
+      <span class="status"><span class="dot"></span><span id="conn-status">connexion…</span> · <span id="user-badge">—</span></span>
+    </header>
+
+    <!-- Panneau gauche : Chat -->
+    <section class="panel" id="panel-chat">
+      <h2>💬 Chat</h2>
+      <div id="chat-messages"></div>
+      <button class="btn btn-stress" id="stress-btn">⚡ Exécuter Stress-Test GR-QM (p53)</button>
+      <div id="chat-input-row">
+        <input id="chat-input" type="text" placeholder="Demandez à RATISS… (Enter pour envoyer)">
+        <button class="btn" id="send-btn">▶</button>
+      </div>
+    </section>
+
+    <!-- Panneau central : Raisonnement en cascade -->
+    <section class="panel" id="panel-reasoning">
+      <h2>🧠 Raisonnement en cascade</h2>
+      <div id="reasoning-steps"></div>
+    </section>
+
+    <!-- Panneau droit : Télémétrie + Artéfacts -->
+    <section class="panel" id="panel-right">
+      <div id="telemetry" class="panel">
+        <h2>📡 Télémétrie (Memory Guard 7500 Mo)</h2>
+        <div id="telemetry-chart"></div>
+      </div>
+      <div id="artifacts" class="panel">
+        <h2>📦 Artéfacts</h2>
+        <div id="artifact-list"></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const API = { base: (loc) => `${loc.protocol}//${loc.host}` };
+
+    // ---------- State ----------
+    let token = localStorage.getItem("ratiss_token");
+    let user = localStorage.getItem("ratiss_user");
+    let ws = null;
+    let dashboard = null;
+
+    // ---------- Login ----------
+    async function login() {
+      const u = document.getElementById("login-user").value.trim();
+      const p = document.getElementById("login-pass").value;
+      const err = document.getElementById("login-err");
+      err.classList.add("hidden");
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, password: p }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Échec de connexion");
+        token = data.token; user = u;
+        localStorage.setItem("ratiss_token", token);
+        localStorage.setItem("ratiss_user", user);
+        showApp();
+      } catch (e) {
+        err.textContent = e.message;
+        err.classList.remove("hidden");
+      }
+    }
+
+    function showApp() {
+      document.getElementById("login-overlay").classList.add("hidden");
+      document.getElementById("app").classList.remove("hidden");
+      document.getElementById("user-badge").textContent = user || "invité";
+      document.getElementById("conn-status").textContent = "connexion…";
+      connectWs();
+      dashboard = new TelemetryDashboard("telemetry-chart");
+      refreshArtifacts();
+      pollTelemetry();
+    }
+
+    // ---------- WebSocket (streaming raisonnement) ----------
+    function connectWs() {
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      ws = new WebSocket(`${proto}//${location.host}/ws/stream?token=${encodeURIComponent(token)}`);
+      ws.onopen = () => {
+        document.getElementById("conn-status").textContent = "connecté";
+        document.getElementById("conn-status").style.color = "#39ff8a";
+      };
+      ws.onmessage = (ev) => {
+        try { const m = JSON.parse(ev.data); handleWs(m); } catch {}
+      };
+      ws.onclose = () => {
+        document.getElementById("conn-status").textContent = "reconnexion…";
+        document.getElementById("conn-status").style.color = "#ffb454";
+        setTimeout(connectWs, 3000);
+      };
+    }
+
+    function handleWs(m) {
+      switch (m.type) {
+        case "step":      addReasoningStep(m.label, m.text, m.status || "ok"); break;
+        case "assistant": appendMsg("assistant", m.text); break;
+        case "error":     appendMsg("error", m.text || m.detail); break;
+        case "artifacts": refreshArtifacts(); break;
+        case "telemetry": if (dashboard) dashboard.pushSample(m.sample); break;
+      }
+    }
+
+    function addReasoningStep(label, text, status) {
+      const c = document.getElementById("reasoning-steps");
+      const div = document.createElement("div");
+      div.className = "step " + (status === "pending" ? "pending" : status === "error" ? "error" : "");
+      div.innerHTML = `<div class="step-label">${label}</div><div>${text || ""}</div>`;
+      c.appendChild(div);
+      c.scrollTop = c.scrollHeight;
+    }
+
+    function appendMsg(role, text) {
+      const c = document.getElementById("chat-messages");
+      const div = document.createElement("div");
+      div.className = "msg " + role;
+      div.textContent = text;
+      c.appendChild(div);
+      c.scrollTop = c.scrollHeight;
+    }
+
+    // ---------- Chat ----------
+    async function sendChat() {
+      const input = document.getElementById("chat-input");
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      appendMsg("user", text);
+      addReasoningStep("🧠 Panthéon Cognitif & Planification Macro", "Nemotron 3 Ultra planifie…", "pending");
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Ratiss-Token": token },
+          body: JSON.stringify({ message: text }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Erreur");
+      } catch (e) {
+        appendMsg("error", e.message);
+      }
+    }
+
+    // ---------- Stress-test ----------
+    async function runStress() {
+      addReasoningStep("⚡ Stress-Test GR-QM (p53)", "Demande envoyée à Prime Agent…", "pending");
+      try {
+        const res = await fetch("/api/stress-test", {
+          method: "POST",
+          headers: { "X-Ratiss-Token": token },
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.detail || "Erreur stress-test");
+        }
+        addReasoningStep("⚡ Stress-Test GR-QM (p53)", "Lancé dans la sandbox NemoSandbox", "ok");
+      } catch (e) {
+        appendMsg("error", e.message);
+      }
+    }
+
+    // ---------- Telemetry polling ----------
+    function pollTelemetry() {
+      setInterval(async () => {
+        try {
+          const res = await fetch("/api/telemetry", {
+            headers: { "X-Ratiss-Token": token },
+          });
+          if (res.ok) dashboard.pushSample(await res.json());
+        } catch {}
+      }, 1000);
+    }
+
+    // ---------- Artifacts ----------
+    async function refreshArtifacts() {
+      try {
+        const res = await fetch("/api/artifacts", {
+          headers: { "X-Ratiss-Token": token },
+        });
+        if (!res.ok) return;
+        const files = await res.json();
+        const list = document.getElementById("artifact-list");
+        list.innerHTML = "";
+        (files || []).forEach(f => {
+          const div = document.createElement("div");
+          div.className = "artifact";
+          div.innerHTML = `
+            <span class="a-name" title="${f.name}">${f.name}</span>
+            <span style="color:#8a97ab;font-size:10px;font-family:monospace">${f.size_kb} Ko</span>
+            <a href="/api/artifacts/download/${encodeURIComponent(f.name)}?token=${encodeURIComponent(token)}">⬇ DL</a>`;
+          list.appendChild(div);
+        });
+      } catch {}
+    }
+
+    // ---------- Bootstrap ----------
+    if (token && user) showApp();
+    document.getElementById("login-btn").onclick = login;
+    document.getElementById("send-btn").onclick = sendChat;
+    document.getElementById("stress-btn").onclick = runStress;
+    document.getElementById("chat-input").addEventListener("keydown",
+      (e) => { if (e.key === "Enter") sendChat(); });
+  </script>
+</body>
+</html>

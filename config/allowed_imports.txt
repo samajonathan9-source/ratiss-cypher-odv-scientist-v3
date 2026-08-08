@@ -1,0 +1,61 @@
+# Imports autorisés dans la sandbox RATISS V9 Aeon Prime (Open Views)
+# Les modules non listés ici déclenchent un refuser par le contrôleur d'exécution.
+
+math
+numpy
+scipy
+collections
+itertools
+functools
+re
+json
+csv
+os
+sys
+pathlib
+datetime
+time
+uuid
+hashlib
+secrets
+sqlite3
+threading
+queue
+io
+statistics
+random
+typing
+dataclasses
+abc
+contextlib
+decimal
+fractions
+copy
+subprocess
+psutil
+
+# Génération d'artéfacts
+openpyxl
+matplotlib
+pandas
+reportlab
+fpdf2
+pdf2image
+PIL
+bs4
+pypdf
+docx
+
+# RATISS V9
+ratiss_v9_aeon_prime
+connectors
+backend_pur
+agentic_light
+transdipl_y
+terminal_commands
+file_manager
+browser_integration
+
+# Calcul scientifique
+pennylane
+qiskit

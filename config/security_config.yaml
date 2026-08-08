@@ -1,0 +1,30 @@
+# RATISS V9 Aeon Prime — Open Views : configuration de sécurité souveraine
+# Propriété Intellectuelle : JohnKing0 & Architecte Jonathan Evina
+
+security:
+  sessions:
+    ttl_hours: 24
+    db_path: data/sessions.db
+  auth:
+    # Mot de passe local par défaut (modifiable par env RATISS_PASSWORD)
+    admin_password_env: RATISS_PASSWORD
+    default_password: ratiss2026
+    password_hash: pbkdf2_sha256
+    iterations: 200000
+  tokens:
+    storage: sha256_hash_only  # jamais en clair
+    strength: 48_bytes_urlsafe
+  sandbox:
+    memory_guard_mb: 7500        # borne RAM applicative (durcie par cgroups Docker)
+    cpu_limit: 1                 # borne CPU (mode Docker)
+    timeout_seconds: 900         # borne temps par tâche
+    allowed_imports: config/allowed_imports.txt
+    transient_purge: true        # purge des clones/skills temporaires (apatride)
+  prime_agent:
+    provider: openrouter
+    model: nvidia/nemotron-3-ultra-550b-a55b:free
+    timeout: 900
+    noninteractive: true
+  api_keys:
+    storage: environment_secrets   # OPENROUTER_API_KEY, HF_TOKEN, etc.
+    policy: never_log, never_code
