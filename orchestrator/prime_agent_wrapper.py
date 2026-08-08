@@ -58,7 +58,7 @@ class PrimeAgentBridge:
                 "--provider", PROVIDER, "--model", MODEL, "--mode", "json",
             ]
             result = subprocess.run(
-                cmd, cwd=str(cwd), capture_output=True, text=True,
+                cmd, cwd=str(cwd), capture_output=True, text=True, stdin=subprocess.DEVNULL,
                 timeout=TIMEOUT, env=self._agent_env(),
             )
             parsed = self._parse_result(cwd, result)
@@ -126,6 +126,17 @@ class PrimeAgentBridge:
         # Dédoublonner tout en gardant RESULT.md / fichier résultat
         artifacts = sorted(set(artifacts))[:25]
 
+        for ev in events:
+            if ev.get("type") == "auto_retry_end" and not ev.get("success"):
+                raw = (ev.get("finalError") or "").lower()
+                if "429" in raw or "rate limit" in raw:
+                    return {
+                        "summary": "⏳ Quota gratuit OpenRouter épuisé pour aujourd'hui "
+                                   "(limite quotidienne du modèle :free). "
+                                   "Réessaye demain ou utilise une clé OpenRouter avec crédits.",
+                        "response": "Quota gratuit OpenRouter épuisé (429) — réessaye demain ou active des crédits.",
+                        "artifacts": [], "returncode": 0,
+                    }
         if result.returncode != 0:
             err = (result.stderr or "")[-600:]
             summary = (summary or "") + f"\n[ERREUR CLI] {err}" if summary else f"[ERREUR CLI] {err}"

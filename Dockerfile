@@ -13,10 +13,11 @@ RUN apt-get update && \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Node : Prime Agent (installateur officiel, non-interactif)
-RUN mkdir -p /tmp/pa && cd /tmp/pa && \
-    curl -fsSL -o install.sh https://app.primeintellect.ai/prime-agent/install.sh && \
-    printf 'Y\nY\nY\nY\nY\nY\n' | script -qec "sh install.sh" /dev/null > /dev/null 2>&1 ; \
+# Node : Prime Agent (npm global, fiable dans Docker ; fallback sur l'installateur officiel)
+RUN npm install -g prime-agent --yes 2>/dev/null || \
+    ( mkdir -p /tmp/pa && cd /tmp/pa && \
+      curl -fsSL -o install.sh https://app.primeintellect.ai/prime-agent/install.sh && \
+      printf 'Y\nY\nY\nY\nY\nY\n' | script -qec "sh install.sh" /dev/null > /dev/null 2>&1 ) ; \
     rm -rf /tmp/pa
 
 COPY . .
