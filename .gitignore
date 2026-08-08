@@ -10,3 +10,7 @@ chainlit.md
 logs/
 tmp/
 *.log
+data/sessions.db
+data/sessions.db-shm
+data/sessions.db-wal
+__pycache__/
