@@ -17,6 +17,7 @@ OPENROUTER_BASE_URL = os.environ.get(
 OPENROUTER_MODEL = os.environ.get(
     "OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free"
 )
+FALLBACK_MODEL = os.environ.get("OR_FALLBACK_MODEL", "google/gemini-3-flash-preview")
 
 SYSTEM_PLAN = """Tu es NEMOTRON 3 ULTRA, le stratège du système RATISS V9 Aeon Prime.
 Tu PLANIFIES mais tu n'exécutes rien et tu n'écris pas de code.
@@ -45,9 +46,13 @@ class NemotronClient:
         self.model = OPENROUTER_MODEL
 
     def chat(self, messages: list[dict], max_tokens: int = 8192) -> str:
+        return self._call_model(messages, max_tokens, primary=True)
+
+    def _call_model(self, messages: list[dict], max_tokens: int,
+                    primary: bool) -> str:
         url = f"{self.base}/chat/completions"
         payload = {
-            "model": self.model,
+            "model": self.model if primary else FALLBACK_MODEL,
             "messages": messages,
             "temperature": 0.3,
             "max_tokens": max_tokens,
@@ -56,7 +61,7 @@ class NemotronClient:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": "https://huggingface.co/spaces",
-            "X-Title": "RATISS V9 Aeon Prime — Open Views",
+            "X-Title": "RATISS V9 Aeon Prime - Open Views",
         }
         data_bytes = json.dumps(payload).encode("utf-8")
         last_err = ""
@@ -68,6 +73,15 @@ class NemotronClient:
                 if "choices" not in data or not data["choices"]:
                     raise KeyError("choices")
                 return data["choices"][0]["message"]["content"]
+            except urllib.error.HTTPError as e:
+                body = (e.read() or b"").decode("utf-8", "ignore")
+                last_err = str(e)
+                # 429 (quota gratuit) sur le modèle principal → bascule vers le
+                # modèle de secours sur ce même appel, puis sur les suivants
+                if primary and attempt == 0 and ("429" in body or e.code == 429):
+                    self.model = FALLBACK_MODEL
+                    return self._call_model(messages, max_tokens, primary=False)
+                time.sleep(2 * (attempt + 1))
             except Exception as e:
                 last_err = str(e)
                 time.sleep(2 * (attempt + 1))

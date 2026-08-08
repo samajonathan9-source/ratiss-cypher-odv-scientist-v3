@@ -107,11 +107,11 @@ async def chat(req: ChatRequest, session: dict = Depends(get_session)):  # heade
     """Pipeline : Nemotron planifie → Prime Agent exécute → RATISS calcule."""
     sid = session["session_id"]
     loop = asyncio.get_running_loop()
-    task = loop.create_task(_run_pipeline(sid, req.message))
+    task = loop.create_task(_run_pipeline(sid, req.message, session))
     return {"status": "started", "session_id": sid}
 
 
-async def _run_pipeline(session_id: str, message: str):
+async def _run_pipeline(session_id: str, message: str, session: dict | None = None):
     ws_b = lambda payload: ws_broadcast(session_id, payload)
     try:
         await ws_b({"type": "step", "label": "🧠 Panthéon Cognitif & Planification Macro",

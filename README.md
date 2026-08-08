@@ -35,6 +35,10 @@ uvicorn interface.app:app --host 0.0.0.0 --port 7860
 
 Premier accès : identifiant de votre choix + mot de passe (auto-enregistrement, compte `admin` par défaut).
 
+## Quota gratuit OpenRouter (modèles `:free`)
+
+La clé OpenRouter en mode gratuit est limitée à **50 requêtes/jour** (limite globale couvrant tous les modèles `:free` d'OpenRouter, dont Nemotron 3 Ultra). Lorsqu'elle est épuisée, le chat affiche un message clair (« ⏳ Quota gratuit OpenRouter épuisé pour aujourd'hui… ») et le **Stress-Test RATISS et la télémétrie restent pleinement fonctionnels**. Le quota se réinitialise automatiquement à **00:00 UTC (02:00 heure de Paris)**. Pour un usage illimité : fournir une clé OpenRouter avec crédits (variable `OPENROUTER_API_KEY`) — aucun changement de code nécessaire.
+
 ## Hugging Face Space (Docker)
 
 Le `Dockerfile` est prêt pour un HF Space de type Docker (port 7860). Secrets HF à définir : `OPENROUTER_API_KEY`, `HF_TOKEN`, `IBM_QUANTUM_TOKEN`, `QUANDELA_API_KEY`.

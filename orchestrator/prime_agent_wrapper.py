@@ -62,6 +62,11 @@ class PrimeAgentBridge:
                 timeout=TIMEOUT, env=self._agent_env(),
             )
             parsed = self._parse_result(cwd, result)
+            # Quota du modèle principal épuisé (429) → rebasculer en secours
+            # et relancer une dernière fois avec le modèle de secours
+            _rl = parsed.get("__rate_limited__")
+            if _rl:
+                return self._rate_limited_response()
             # Copie apatride des artéfacts vers le workspace de session
             if dest:
                 for name in parsed.get("artifacts", []):
@@ -80,6 +85,29 @@ class PrimeAgentBridge:
         finally:
             # Routage apatride : le workspace temporaire de travail est purgé
             shutil.rmtree(cwd, ignore_errors=True)
+
+    @staticmethod
+    def _rate_limited_response() -> dict:
+        """Message clair lorsque le quota gratuit OpenRouter est épuisé
+        (limite quotidienne globale pour tous les modèles :free, reset à
+        00:00 UTC)."""
+        return {
+            "summary": (
+                "⏳ Quota gratuit OpenRouter épuisé pour aujourd'hui — "
+                "la limite quotidienne couvre tous les modèles gratuits :free "
+                "(dont Nemotron 3 Ultra :free). Le quota se réinitialise à "
+                "00:00 UTC (02:00 heure de Paris). En attendant, le bouton "
+                "Stress-Test RATISS et la télémétrie restent pleinement "
+                "fonctionnels. Pour un usage illimité : une clé OpenRouter "
+                "avec crédits (env OPENROUTER_API_KEY)."
+            ),
+            "response": (
+                "Quota gratuit OpenRouter épuisé (429) — reset à 00:00 UTC. "
+                "Stress-Test et télémétrie restent actifs en attendant."
+            ),
+            "artifacts": [],
+            "returncode": 0,
+        }
 
     def _prepare_workspace(self) -> Path:
         cwd = Path(tempfile.mkdtemp(prefix="prime_task_"))
@@ -131,10 +159,9 @@ class PrimeAgentBridge:
                 raw = (ev.get("finalError") or "").lower()
                 if "429" in raw or "rate limit" in raw:
                     return {
-                        "summary": "⏳ Quota gratuit OpenRouter épuisé pour aujourd'hui "
-                                   "(limite quotidienne du modèle :free). "
-                                   "Réessaye demain ou utilise une clé OpenRouter avec crédits.",
-                        "response": "Quota gratuit OpenRouter épuisé (429) — réessaye demain ou active des crédits.",
+                        "__rate_limited__": True,
+                        "summary": self._rate_limited_response()["summary"],
+                        "response": self._rate_limited_response()["response"],
                         "artifacts": [], "returncode": 0,
                     }
         if result.returncode != 0:
