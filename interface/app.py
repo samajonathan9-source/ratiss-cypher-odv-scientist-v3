@@ -35,6 +35,7 @@ from orchestrator.nemotron_client import NemotronClient
 from orchestrator.skill_manager import SkillManager
 from orchestrator.ratiss_skill import node_health, stress_test_p53
 from security.workspace_isolator import WorkspaceIsolator
+from orchestrator.async_pipeline import run_async_pipeline, check_memory_guard
 
 app = FastAPI(title="Open Views — RATISS V9 Aeon Prime", version="3.0.0")
 
@@ -114,16 +115,19 @@ async def chat(req: ChatRequest, session: dict = Depends(get_session)):  # heade
 async def _run_pipeline(session_id: str, message: str, session: dict | None = None):
     ws_b = lambda payload: ws_broadcast(session_id, payload)
     try:
+        check_memory_guard()
         await ws_b({"type": "step", "label": "🧠 Panthéon Cognitif & Planification Macro",
                     "text": "Nemotron 3 Ultra planifie la tâche…", "status": "pending"})
-        plan = await asyncio.to_thread(NEMOTRON.plan_task, message)
+        
+        ws_path = WORKSPACES.resolve(session)
+        pipeline_res = await run_async_pipeline(session_id, message, NEMOTRON, PRIME, ws_path)
+        
+        plan = pipeline_res["plan"]
+        result = pipeline_res["result"]
+
         await ws_b({"type": "step", "label": "🧠 Panthéon Cognitif & Planification Macro",
                     "text": json.dumps(plan, ensure_ascii=False)[:400], "status": "ok"})
 
-        await ws_b({"type": "step", "label": "🛠️ Génération de Code (Prime Agent)",
-                    "text": "Prime Agent génère et exécute…", "status": "pending"})
-        ws_path = WORKSPACES.resolve(session)
-        result = await asyncio.to_thread(PRIME.execute_task, message, plan, ws_path)
         await ws_b({"type": "step", "label": "🛠️ Génération de Code (Prime Agent)",
                     "text": (result.get("summary") or "")[:300], "status": "ok"})
 

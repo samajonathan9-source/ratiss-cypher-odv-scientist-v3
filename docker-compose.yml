@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  ratiss-backend:
+    build: .
+    container_name: ratiss-backend
+    ports:
+      - "7860:7860"
+    environment:
+      - MEMORY_GUARD_MB=7500
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - RATISS_PASSWORD=${RATISS_PASSWORD:-admin}
+      - PRIME_AGENT_PROVIDER=openrouter
+      - PRIME_AGENT_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
+    volumes:
+      - ./data:/app/data
+      - ./workspace:/app/workspace
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/api/telemetry"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  openhands:
+    image: ghcr.io/all-hands-ai/openhands:0.9
+    container_name: openhands-visualizer
+    ports:
+      - "3000:3000"
+    environment:
+      - SANDBOX_USER_ID=1000
+      - WORKSPACE_BASE=/app/workspace
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./workspace:/app/workspace
+      - ./logs:/app/logs
+    depends_on:
+      - ratiss-backend
+    command: >
+      bash -c "echo 'Mode Proxy/Visualiseur Passif activé' && 
+      /usr/local/bin/entrypoint.sh"
+    restart: unless-stopped
+
+networks:
+  default:
+    name: ratiss-network
